@@ -14,11 +14,10 @@ if [ -z "$SKELETON" ]; then
 fi
 
 # select custom repo with -r option
-while getopts "r:h" opt; do
+while getopts ":r:h" opt; do
     case ${opt} in
     r)
         REPO=$OPTARG
-        echo "Using custom repo $REPO"
         ;;
     h)
         echo "Usage:"
@@ -28,20 +27,27 @@ while getopts "r:h" opt; do
         exit 0
         ;;
     \?)
-        echo "Invalid option: $OPTARG" 1>&2
+        echo "Error: Invalid option: $OPTARG" 1>&2
         exit 1
         ;;
     esac
 done
 
-git switch -c skeleton
+CURRENT_BRANCH=$(git branch --show-current)
 
-git clone --depth=1 $REPO $TEMP_DIR/skeleton
+echo -e "Adding \033[33m$SKELETON\033[0m from \033[33m$REPO\033[0m to \033[33mskeleton\033[0m branch and merging to \033[33m$CURRENT_BRANCH\033[0m"
 
-cd $TEMP_DIR/skeleton
+git clone --depth=1 $REPO $TEMP_DIR/skeleton 2>/dev/null
 
-ls
+git switch -c skeleton 2>/dev/null
 
-# cp -r $TEMP_DIR/skeleton/$SKELETON $MODULE_PATH/
+cp -r $TEMP_DIR/skeleton/$SKELETON ./ 2>/dev/null
 
-# rm -fr $TEMP_DIR
+git add -A
+git commit -m "feat(skeleton): add $SKELETON from $REPO"
+
+rm -fr $TEMP_DIR 2>/dev/null
+
+git switch $CURRENT_BRANCH 2>/dev/null
+
+git merge --no-ff skeleton
