@@ -1,0 +1,8 @@
+{
+  "name": "@smallhillcz/sdk",
+  "version": "1.0.0",
+  "scripts": {},
+  "bin": {
+    "skeleton": "./skeleton/skeleton.sh"
+  }
+}
