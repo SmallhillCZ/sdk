@@ -1,6 +1,6 @@
 #!/bin/bash -e
 
-REPO=https://github.com/smallhillcz/sdk
+REPO=https://github.com/smallhillcz/skeletons
 CMD=$(basename $0)
 TEMP_DIR=$(mktemp -d)
 # TEMP_DIR=/workspaces/tmp
@@ -33,7 +33,7 @@ while getopts ":r:hb:" opt; do
         echo "Usage:"
         echo "  $CMD [options] <skeleton> [<target>]"
         echo "Options:"
-        echo "  -r <repo>  Use custom repo (default: https://github.com/smallhillcz/sdk)"
+        echo "  -r <repo>  Use custom repo (default: https://github.com/smallhillcz/skeletons)"
         echo "  -b <branch>  Use custom branch for skeletons (default: skeleton)"
         exit 0
         ;;
