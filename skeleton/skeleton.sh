@@ -39,7 +39,7 @@ echo -e "Adding \033[33m$SKELETON\033[0m from \033[33m$REPO\033[0m to \033[33msk
 
 git clone --depth=1 $REPO $TEMP_DIR/skeleton 2>/dev/null
 
-git switch -c skeleton 2>/dev/null
+git switch skeleton 2>/dev/null || git checkout -b skeleton 2>/dev/null
 
 cp -r $TEMP_DIR/skeleton/$SKELETON ./ 2>/dev/null
 
