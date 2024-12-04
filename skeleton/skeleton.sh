@@ -52,8 +52,8 @@ cd $REPO_ROOT
 
 # issue warning when REPO_BRANCH is equal to SKELETON_BRANCH
 if [ "$REPO_BRANCH" == "$SKELETON_BRANCH" ]; then
-    echo -e "\033[33mError:\033[0m current branch ($REPO_BRANCH) is equal to skeleton branch ($SKELETON_BRANCH)"
-    exit 1
+    echo -e "\033[33mWarning:\033[0m current branch ($REPO_BRANCH) is equal to skeleton branch ($SKELETON_BRANCH)"
+    exit 0
 fi
 
 TARGET_EXISTS=0
@@ -121,5 +121,3 @@ rm -fr $TEMP_DIR 1>/dev/null
 git switch $REPO_BRANCH 1>/dev/null
 
 git merge --no-ff $SKELETON_BRANCH
-
-cd $WORKDIR
