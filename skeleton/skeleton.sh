@@ -3,9 +3,11 @@
 REPO=https://github.com/smallhillcz/sdk
 CMD=$(basename $0)
 TEMP_DIR=$(mktemp -d)
+# TEMP_DIR=/workspaces/tmp
 SKELETON_DIR=$1
 TARGET_DIR=$SKELETON
 SKELETON_BRANCH=skeleton
+WORKDIR=$(pwd)
 
 # error if skeleton is not specified
 if [ -z "$SKELETON_DIR" ]; then
@@ -44,9 +46,9 @@ done
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 REPO_BRANCH=$(git branch --show-current)
+UNTRACKED_DIR=$REPO_ROOT/.untracked
 
-# create a list of all files in the repository which are not tracked by git
-UNTRACKED_FILES=$(git status --porcelain | grep '^??' | cut -c4-)
+cd $REPO_ROOT
 
 # issue warning when REPO_BRANCH is equal to SKELETON_BRANCH
 if [ "$REPO_BRANCH" == "$SKELETON_BRANCH" ]; then
@@ -75,21 +77,28 @@ else
     git switch -c $SKELETON_BRANCH 1>/dev/null
 fi
 
+# create a list of all files in the repository which are not tracked by git
+UNTRACKED_FILES=$(git status --porcelain | grep '^??' | cut -c4-)
+
+# move untracked files out of the way
 mkdir -p $TEMP_DIR/untracked
 for file in $UNTRACKED_FILES; do
-    mkdir -p $(dirname "$TEMP_DIR/untracked/$file")
-    mv "$file" "$TEMP_DIR/untracked/$file"
+    mkdir -p $(dirname "$UNTRACKED_DIR/$file")
+    mv "$REPO_ROOT/$file" "$UNTRACKED_DIR/$file"
 done
 
+# remove target directory and copy new skeleton
 rm -fr $REPO_ROOT/$TARGET_DIR 1>/dev/null
 cp -r $TEMP_DIR/skeleton/$SKELETON_DIR/. $REPO_ROOT/$TARGET_DIR 1>/dev/null
 
 git add -A $REPO_ROOT/$TARGET_DIR
 
+# return untracked files back
 for file in $UNTRACKED_FILES; do
-    mkdir -p $(dirname "$TEMP_DIR/untracked/$file")
-    mv "$TEMP_DIR/untracked/$file" "$REPO_ROOT/$file"
+    mkdir -p $(dirname "$REPO_ROOT/$file")
+    mv "$UNTRACKED_DIR/$file" "$REPO_ROOT/$file"
 done
+rm -fr $UNTRACKED_DIR 1>/dev/null
 
 # if no staged files, exit
 if [ -z "$(git diff --cached --exit-code)" ]; then
@@ -106,8 +115,11 @@ else
     git commit -m "feat(skeleton): update $TARGET_DIR from $REPO#$SKELETON_DIR"
 fi
 
+# cleanup
 rm -fr $TEMP_DIR 1>/dev/null
 
 git switch $REPO_BRANCH 1>/dev/null
 
 git merge --no-ff $SKELETON_BRANCH
+
+cd $WORKDIR
