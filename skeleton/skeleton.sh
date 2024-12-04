@@ -45,6 +45,9 @@ done
 REPO_ROOT=$(git rev-parse --show-toplevel)
 REPO_BRANCH=$(git branch --show-current)
 
+# create a list of all files in the repository which are not tracked by git
+UNTRACKED_FILES=$(git status --porcelain | grep '^??' | cut -c4-)
+
 # issue warning when REPO_BRANCH is equal to SKELETON_BRANCH
 if [ "$REPO_BRANCH" == "$SKELETON_BRANCH" ]; then
     echo -e "\033[33mError:\033[0m current branch ($REPO_BRANCH) is equal to skeleton branch ($SKELETON_BRANCH)"
@@ -72,10 +75,31 @@ else
     git switch -c $SKELETON_BRANCH 1>/dev/null
 fi
 
+mkdir -p $TEMP_DIR/untracked
+for file in $UNTRACKED_FILES; do
+    mkdir -p $(dirname "$TEMP_DIR/untracked/$file")
+    mv "$file" "$TEMP_DIR/untracked/$file"
+done
+
+rm -fr $REPO_ROOT/$TARGET_DIR 1>/dev/null
 cp -r $TEMP_DIR/skeleton/$SKELETON_DIR/. $REPO_ROOT/$TARGET_DIR 1>/dev/null
 
 git add -A $REPO_ROOT/$TARGET_DIR
 
+for file in $UNTRACKED_FILES; do
+    mkdir -p $(dirname "$TEMP_DIR/untracked/$file")
+    mv "$TEMP_DIR/untracked/$file" "$REPO_ROOT/$file"
+done
+
+# if no staged files, exit
+if [ -z "$(git diff --cached --exit-code)" ]; then
+    echo "No changes"
+    rm -fr $TEMP_DIR 1>/dev/null
+    git switch $REPO_BRANCH 1>/dev/null
+    exit 0
+fi
+
+# merge changes to original branch
 if [ -z "$TARGET_EXISTS" ]; then
     git commit -m "feat(skeleton): add $TARGET_DIR from $REPO#$SKELETON_DIR"
 else
