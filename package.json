@@ -13,6 +13,6 @@
   },
   "license": "MIT",
   "bin": {
-    "skeleton": "./skeleton/skeleton.sh"
+    "skeleton": "skeleton/skeleton.sh"
   }
 }
