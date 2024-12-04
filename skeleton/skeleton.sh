@@ -45,6 +45,12 @@ done
 REPO_ROOT=$(git rev-parse --show-toplevel)
 REPO_BRANCH=$(git branch --show-current)
 
+# issue warning when REPO_BRANCH is equal to SKELETON_BRANCH
+if [ "$REPO_BRANCH" == "$SKELETON_BRANCH" ]; then
+    echo -e "\033[33mError:\033[0m current branch ($REPO_BRANCH) is equal to skeleton branch ($SKELETON_BRANCH)"
+    exit 1
+fi
+
 TARGET_EXISTS=0
 if [ -d $REPO_ROOT/$SKELETON_DIR ]; then
     TARGET_EXISTS=1
@@ -57,11 +63,6 @@ else
 fi
 
 echo ""
-
-# issue warning when REPO_BRANCH is equal to SKELETON_BRANCH
-if [ "$REPO_BRANCH" == "$SKELETON_BRANCH" ]; then
-    echo -e "\033[33mWarning:\033[0m current branch ($REPO_BRANCH) is equal to skeleton branch ($SKELETON_BRANCH)"
-fi
 
 git clone --quiet --depth=1 $REPO $TEMP_DIR/skeleton 1>/dev/null
 
