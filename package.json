@@ -9,10 +9,14 @@
     "release": "git switch release && git merge master --ff-only && git push --follow-tags && git switch master",
     "release:patch": "git switch master && git pull && npm version patch && git push && npm run release",
     "release:minor": "git switch master && git pull && npm version minor && git push && npm run release",
-    "release:major": "git switch master && git pull && npm version major && git push && npm run release"
+    "release:major": "git switch master && git pull && npm version major && git push && npm run release",
+    "update:skeleton": "cd skeleton && git pull && cd .. && git add skeleton && git commit -m 'chore(skeleton): update version' && git push"
   },
   "license": "MIT",
   "bin": {
     "skeleton": "cli/skeleton.sh"
+  },
+  "dependencies": {
+    "@smallhillcz/skeleton": "^1.0.0"
   }
 }
