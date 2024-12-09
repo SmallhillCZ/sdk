@@ -14,9 +14,6 @@
   },
   "license": "MIT",
   "bin": {
-    "skeleton": "cli/skeleton.sh"
-  },
-  "dependencies": {
-    "@smallhillcz/skeleton": "^1.0.0"
+    "skeleton": "./skeleton/cli/skeleton.sh"
   }
 }
