@@ -10,7 +10,8 @@
     "release:patch": "git switch master && git pull && npm version patch && git push && npm run release",
     "release:minor": "git switch master && git pull && npm version minor && git push && npm run release",
     "release:major": "git switch master && git pull && npm version major && git push && npm run release",
-    "update:skeleton": "cd skeleton && git pull && cd .. && git add skeleton && git commit -m 'chore(skeleton): update version' && git push"
+    "update:skeleton": "cd skeleton && git pull && cd .. && git add skeleton && git commit -m 'chore(skeleton): update submodule' && git push",
+    "update:openapi": "cd openapi && git pull && cd .. && git add openapi && git commit -m 'chore(openapi): update submodule' && git push"
   },
   "license": "MIT",
   "bin": {
