@@ -46,7 +46,6 @@ done
 
 REPO_ROOT=$(git rev-parse --show-toplevel)
 REPO_BRANCH=$(git branch --show-current)
-UNTRACKED_DIR=$REPO_ROOT/.untracked
 
 cd $REPO_ROOT
 
@@ -81,15 +80,8 @@ else
     git switch -c $SKELETON_BRANCH 1>/dev/null
 fi
 
-# create a list of all files in the repository which are not tracked by git
-UNTRACKED_FILES=$(git status --porcelain | grep '^??' | cut -c4-)
-
-# move untracked files out of the way
-mkdir -p $TEMP_DIR/untracked
-for file in $UNTRACKED_FILES; do
-    mkdir -p $(dirname "$UNTRACKED_DIR/$file")
-    mv "$REPO_ROOT/$file" "$UNTRACKED_DIR/$file"
-done
+# move untracked files from original branch out of the way
+git stash -a 1>/dev/null
 
 # remove target directory and copy new skeleton
 rm -fr $REPO_ROOT/$TARGET 1>/dev/null
@@ -98,18 +90,13 @@ cp -r $TEMP_DIR/skeleton/$SKELETON $REPO_ROOT/$TARGET 1>/dev/null
 git add -A $REPO_ROOT/$TARGET
 
 # return untracked files back
-for file in $UNTRACKED_FILES; do
-    mkdir -p $(dirname "$REPO_ROOT/$file")
-    mv "$UNTRACKED_DIR/$file" "$REPO_ROOT/$file"
-done
+git stash pop 1>/dev/null
 
 # if no staged files, exit
 if [ -z "$(git diff --cached --exit-code)" ]; then
     echo "No changes"
 
     # cleanup
-    rm -d $UNTRACKED_DIR 1>/dev/null
-
     rm -fr $TEMP_DIR/skeleton 1>/dev/null
     rm -d $TEMP_DIR 1>/dev/null
 
@@ -126,8 +113,6 @@ else
 fi
 
 # cleanup
-rm -d $UNTRACKED_DIR 1>/dev/null
-
 rm -fr $TEMP_DIR/skeleton 1>/dev/null
 rm -d $TEMP_DIR 1>/dev/null
 
