@@ -102,12 +102,18 @@ for file in $UNTRACKED_FILES; do
     mkdir -p $(dirname "$REPO_ROOT/$file")
     mv "$UNTRACKED_DIR/$file" "$REPO_ROOT/$file"
 done
-rm -fr $UNTRACKED_DIR 1>/dev/null
 
 # if no staged files, exit
 if [ -z "$(git diff --cached --exit-code)" ]; then
     echo "No changes"
-    rm -fr $TEMP_DIR 1>/dev/null
+
+    # cleanup
+    rm -d $UNTRACKED_DIR 1>/dev/null
+
+    rm -fr $TEMP_DIR/skeleton 1>/dev/null
+    rm -d $TEMP_DIR 1>/dev/null
+
+    # return to original branch
     git switch $REPO_BRANCH 1>/dev/null
     exit 0
 fi
@@ -120,8 +126,12 @@ else
 fi
 
 # cleanup
-rm -fr $TEMP_DIR 1>/dev/null
+rm -d $UNTRACKED_DIR 1>/dev/null
 
+rm -fr $TEMP_DIR/skeleton 1>/dev/null
+rm -d $TEMP_DIR 1>/dev/null
+
+# return to original branch and merge
 git switch $REPO_BRANCH 1>/dev/null
 
 git merge --no-ff --no-edit $SKELETON_BRANCH
