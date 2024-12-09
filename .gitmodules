@@ -1,3 +1,6 @@
 [submodule "skeleton"]
 	path = skeleton
 	url = https://github.com/SmallhillCZ/skeleton
+[submodule "openapi"]
+	path = openapi
+	url = https://github.com/SmallhillCZ/openapi-sdk

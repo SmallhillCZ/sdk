@@ -11,13 +11,18 @@ case $COMMAND in
     shift
     $PACKAGE_ROOT/skeleton/cli/skeleton.sh $@
     ;;
+"openapi")
+    shift
+    $PACKAGE_ROOT/openapi/cli/openapi-sdk.sh $@
+    ;;
 *)
     echo -e "Smallhill SDK v$VERSION"
     echo -e ""
     echo -e "Usage: \033[33m$CMD <COMMAND> <ARGS>\033[0m"
     echo -e ""
-    echo -e "Commands:"
-    echo -e "  skeleton - generate project files from skeleton repository"
+    echo -e "Command:       Info:                Repository:"
+    echo -e "\033[33mskeleton\033[0m       smhl skeleton -h     https://github.com/SmallhillCZ/skeleton"
+    echo -e "\033[33mopenapi\033[0m        smhl openapi -h      https://github.com/SmallhillCZ/openapi-sdk"
     echo -e ""
     echo -e "use \033[33m$CMD <COMMAND> -h\033[0m for more information on a specific command"
     exit 1
