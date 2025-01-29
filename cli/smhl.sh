@@ -13,7 +13,7 @@ case $COMMAND in
     ;;
 "openapi")
     shift
-    npx openapi $@
+    npx openapi-sdk $@
     ;;
 *)
     echo -e "Smallhill SDK v$VERSION"
