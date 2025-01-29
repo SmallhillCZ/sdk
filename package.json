@@ -16,5 +16,9 @@
   "license": "MIT",
   "bin": {
     "smhl": "./cli/smhl.sh"
+  },
+  "dependencies": {
+    "@smallhillcz/openapi-sdk": "^1.0.6",
+    "@smallhillcz/skeleton": "^1.1.0"
   }
 }

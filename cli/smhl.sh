@@ -9,11 +9,11 @@ COMMAND=$1
 case $COMMAND in
 "skeleton")
     shift
-    $PACKAGE_ROOT/skeleton/cli/skeleton.sh $@
+    npm run skeleton $@
     ;;
 "openapi")
     shift
-    $PACKAGE_ROOT/openapi/cli/openapi-sdk.sh $@
+    npm run openapi $@
     ;;
 *)
     echo -e "Smallhill SDK v$VERSION"

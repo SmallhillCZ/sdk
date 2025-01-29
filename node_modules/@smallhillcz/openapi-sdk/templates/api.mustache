@@ -1,0 +1,35 @@
+/* tslint:disable */
+/* eslint-disable */
+{{>licenseInfo}}
+
+import type { Configuration } from './configuration';
+import type { AxiosInstance, AxiosRequestConfig } from 'axios';
+import globalAxios from 'axios';
+{{#withNodeImports}}
+// URLSearchParams not necessarily used
+// @ts-ignore
+import { URL, URLSearchParams } from 'url';
+{{#multipartFormData}}
+import FormData from 'form-data'
+{{/multipartFormData}}
+{{/withNodeImports}}
+// Some imports not used depending on template conditions
+// @ts-ignore
+import { DUMMY_BASE_URL, assertParamExists, setApiKeyToObject, setBasicAuthToObject, setBearerAuthToObject, setOAuthToObject, setSearchParams, serializeDataIfNeeded, toPathString, createRequestFunction } from './common';
+// @ts-ignore
+import { BASE_PATH, COLLECTION_FORMATS, BaseAPI, RequiredError, operationServerMap } from './base';
+
+{{#models}}
+{{#model}}{{#isEnum}}{{>modelEnum}}{{/isEnum}}{{#oneOf}}{{#-first}}{{>modelOneOf}}{{/-first}}{{/oneOf}}{{^isEnum}}{{^oneOf}}{{>modelGeneric}}{{/oneOf}}{{/isEnum}}{{/model}}
+{{/models}}
+
+{{#apiInfo}}{{#apis}}
+{{>apiInner}}
+{{/apis}}{{/apiInfo}}
+export class SDK {
+{{#apiInfo}}{{#apis}}{{#operations}}    {{classname}}: {{classname}};
+{{/operations}}{{/apis}}{{/apiInfo}}
+    constructor(configuration: Configuration, axios?: AxiosInstance) {
+{{#apiInfo}}{{#apis}}{{#operations}}        this.{{classname}} = new {{classname}}(configuration, axios);
+{{/operations}}{{/apis}}{{/apiInfo}}    };
+}
