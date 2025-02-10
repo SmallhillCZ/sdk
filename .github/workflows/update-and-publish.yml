@@ -1,4 +1,4 @@
-name: Update packages
+name: Update packages and publish
 
 on:
   workflow_call:
@@ -20,6 +20,7 @@ jobs:
         with:
           node-version: '22'
           cache: 'npm'
+          registry-url: "https://registry.npmjs.org"
 
       - name: Install dependencies
         run: npm i @smallhillcz/skeleton@latest @smallhillcz/openapi-sdk@latest
@@ -37,3 +38,9 @@ jobs:
           git add .
           git commit -m "feat(sdk): update SDK packages"
           npm run release:patch          
+
+      - name: Publish
+        if: steps.git-check.outputs.changes == 'true'
+        run: npm publish --access public
+        env:
+          NODE_AUTH_TOKEN: ${{secrets.NPM_PUBLISH_TOKEN}}
