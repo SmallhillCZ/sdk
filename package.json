@@ -18,8 +18,8 @@
     "smhl": "./cli/smhl.sh"
   },
   "dependencies": {
-    "@smallhillcz/openapi-sdk": "^1.0.8",
-    "@smallhillcz/skeleton": "^1.1.0"
+    "@smallhillcz/openapi-sdk": "latest",
+    "@smallhillcz/skeleton": "latest"
   },
   "files": [
     "cli"

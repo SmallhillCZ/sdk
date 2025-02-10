@@ -1,7 +1,6 @@
 name: Update packages and publish
 
 on:
-  workflow_call:
   workflow_dispatch:
 
 jobs:

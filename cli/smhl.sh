@@ -1,6 +1,7 @@
 #!/bin/bash -e
 
 PACKAGE_ROOT=$(realpath "$(dirname $(realpath $0))/..")
+GLOBAL_ROOT=$(npm config get prefix)
 VERSION=$(jq -r '.version' $PACKAGE_ROOT/package.json)
 CMD=$(basename $0)
 
@@ -9,12 +10,16 @@ COMMAND=$1
 get_command_path() {
     if [ -f "./node_modules/.bin/$1" ]; then
         COMMAND_PATH="./node_modules/.bin/$1"
+    elif [ -f "$GLOBAL_ROOT/bin/$1" ]; then
+        COMMAND_PATH="$GLOBAL_ROOT/bin/$1"
     elif [ -f "$PACKAGE_ROOT/node_modules/.bin/$1" ]; then
         COMMAND_PATH="$PACKAGE_ROOT/node_modules/.bin/$1"
     else
         COMMAND_PATH="npx --package=$2 $1"    
     fi
 }
+
+
 
 case $COMMAND in
 "skeleton")
@@ -36,6 +41,8 @@ case $COMMAND in
     exit 1
     ;;
 esac
+
+echo $COMMAND_PATH
 
 shift
 $COMMAND_PATH $@
