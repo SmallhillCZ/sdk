@@ -39,7 +39,7 @@ case $COMMAND in
     ;;
 esac
 
-echo "Smallhill SDK: Launching $COMMAND ('$COMMAND_PATH')"
+echo -e "\033[30mSmallhill SDK: Launching $COMMAND ('$COMMAND_PATH')\033[0m"
 
 shift
 $COMMAND_PATH $@
