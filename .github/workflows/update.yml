@@ -1,0 +1,39 @@
+name: Update packages
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  update-packages:
+    name: Update SDK packages
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm i @smallhillcz/skeleton@latest @smallhillcz/openapi-sdk@latest
+
+      - name: Check for changes
+        id: git-check
+        run: |
+          git diff --quiet || echo "changes=true" >> $GITHUB_OUTPUT
+
+      - name: Commit changes
+        if: steps.git-check.outputs.changes != 'true'
+        run: |
+          git config --local user.email "martin.kopecek@smallhill.cz"
+          git config --local user.name "Martin Kopeček"
+          git add .
+          git commit -m "feat(sdk): update SDK packages"
+          npm run release:patch          
