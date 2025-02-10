@@ -17,10 +17,7 @@
   "bin": {
     "smhl": "./cli/smhl.sh"
   },
-  "dependencies": {
-    "@smallhillcz/openapi-sdk": "latest",
-    "@smallhillcz/skeleton": "latest"
-  },
+  "dependencies": {},
   "files": [
     "cli"
   ]

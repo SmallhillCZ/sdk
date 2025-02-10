@@ -12,8 +12,6 @@ get_command_path() {
         COMMAND_PATH="./node_modules/.bin/$1"
     elif [ -f "$GLOBAL_ROOT/bin/$1" ]; then
         COMMAND_PATH="$GLOBAL_ROOT/bin/$1"
-    elif [ -f "$PACKAGE_ROOT/node_modules/.bin/$1" ]; then
-        COMMAND_PATH="$PACKAGE_ROOT/node_modules/.bin/$1"
     else
         COMMAND_PATH="npx --package=$2 $1"    
     fi
@@ -42,7 +40,7 @@ case $COMMAND in
     ;;
 esac
 
-echo $COMMAND_PATH
+echo "Smallhill SDK: Launching $COMMAND ('$COMMAND_PATH')"
 
 shift
 $COMMAND_PATH $@
