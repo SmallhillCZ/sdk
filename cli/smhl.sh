@@ -6,14 +6,22 @@ CMD=$(basename $0)
 
 COMMAND=$1
 
+get_command_path() {
+    if [ -f "./node_modules/.bin/$1" ]; then
+        COMMAND_PATH="./node_modules/.bin/$1"
+    elif [ -f "$PACKAGE_ROOT/node_modules/.bin/$1" ]; then
+        COMMAND_PATH="$PACKAGE_ROOT/node_modules/.bin/$1"
+    else
+        COMMAND_PATH="npx --package=$2 $1"    
+    fi
+}
+
 case $COMMAND in
 "skeleton")
-    shift
-    npx skeleton $@
+    get_command_path skeleton @smallhillcz/skeleton
     ;;
 "openapi")
-    shift
-    npx openapi-sdk $@
+    get_command_path openapi-sdk @smallhillcz/openapi-sdk
     ;;
 *)
     echo -e "Smallhill SDK v$VERSION"
@@ -28,3 +36,6 @@ case $COMMAND in
     exit 1
     ;;
 esac
+
+shift
+$COMMAND_PATH $@
