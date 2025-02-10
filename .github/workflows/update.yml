@@ -30,7 +30,7 @@ jobs:
           git diff --quiet || echo "changes=true" >> $GITHUB_OUTPUT
 
       - name: Commit changes
-        if: steps.git-check.outputs.changes != 'true'
+        if: steps.git-check.outputs.changes == 'true'
         run: |
           git config --local user.email "martin.kopecek@smallhill.cz"
           git config --local user.name "Martin Kopeček"
