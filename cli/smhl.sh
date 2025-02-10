@@ -1,23 +1,18 @@
 #!/bin/bash -e
 
-PACKAGE_ROOT=$(realpath "$(dirname $(realpath $0))/..")
-GLOBAL_ROOT=$(npm config get prefix)
-VERSION=$(jq -r '.version' $PACKAGE_ROOT/package.json)
-CMD=$(basename $0)
-
 COMMAND=$1
 
 get_command_path() {
-    if [ -f "./node_modules/.bin/$1" ]; then
-        COMMAND_PATH="./node_modules/.bin/$1"
+    GLOBAL_ROOT=$(npm config get prefix)
+    
+    if [ -f "$PWD/node_modules/.bin/$1" ]; then
+        COMMAND_PATH="$PWD/node_modules/.bin/$1"
     elif [ -f "$GLOBAL_ROOT/bin/$1" ]; then
         COMMAND_PATH="$GLOBAL_ROOT/bin/$1"
     else
         COMMAND_PATH="npx --package=$2 $1"    
     fi
 }
-
-
 
 case $COMMAND in
 "skeleton")
@@ -27,6 +22,10 @@ case $COMMAND in
     get_command_path openapi-sdk @smallhillcz/openapi-sdk
     ;;
 *)
+    PACKAGE_ROOT=$(realpath "$(dirname $(realpath $0))/..")
+    VERSION=$(jq -r '.version' $PACKAGE_ROOT/package.json 2>/dev/null || echo "ERR")
+    CMD=$(basename $0)
+
     echo -e "Smallhill SDK v$VERSION"
     echo -e ""
     echo -e "Usage: \033[33m$CMD <COMMAND> <ARGS>\033[0m"
