@@ -4,13 +4,13 @@ COMMAND=$1
 
 get_command_path() {
     GLOBAL_ROOT=$(npm config get prefix)
-    
+
     if [ -f "$PWD/node_modules/.bin/$1" ]; then
         COMMAND_PATH="$PWD/node_modules/.bin/$1"
     elif [ -f "$GLOBAL_ROOT/bin/$1" ]; then
         COMMAND_PATH="$GLOBAL_ROOT/bin/$1"
     else
-        COMMAND_PATH="npx --package=$2 $1"    
+        COMMAND_PATH="npx --package=$2@latest $1"
     fi
 }
 
