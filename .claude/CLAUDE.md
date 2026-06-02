@@ -2,23 +2,18 @@
 
 ## Reference Repository: smallhillcz/skeletons
 
-When implementing new features, always consult the reference repository at **https://github.com/smallhillcz/skeletons** for patterns and conventions. Match code structure and style.
+When implementing new features, like backend, frontend etc., always consult the reference repository at **https://github.com/smallhillcz/skeletons**.
 
-Inside devcontainers, the repo is typically already cloned at `/workspaces/smallhill/skeletons`. Prefer reading from there over fetching from GitHub.
+If feature is implemented as a top level item in this directory, copy it and after copying change what is needed (like package names).
 
-The repo contains these skeletons:
-- `nestjs/` — NestJS application skeleton
-- `sdk/` — SDK skeleton
-- `github/` — GitHub Actions / CI workflows
-- `Dockerfile` — base Dockerfile pattern
+If smallhillcz/skeletons repo is in the current workspace, use it, but be sure to pull changes from the remote before using it.
 
-When implementing anything that overlaps with these areas, read the relevant skeleton files first and follow the same patterns.
+After adding a feature from skeletons repo, commit the changes with a message like "feat: add <feature> from skeletons repo <repo url>" with skull gitmoji.
 
 ## Updating the Reference Repository
 
 When explicitly told to update the skeletons repository:
 
-1. If `/workspaces/smallhill/skeletons` exists and is the right repo, work there directly.
-2. Otherwise clone it: `git clone https://github.com/smallhillcz/skeletons /workspaces/tmp/skeletons`
-3. Make the requested changes.
-4. Commit and push freely — no need to ask for confirmation.
+1. If needed clone it to a temp folder and update it there. If it is already cloned in the workspace, pull the latest changes from the remote before editing.
+2. Make the requested changes.
+3. Commit and push freely — no need to ask for confirmation.
