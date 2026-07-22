@@ -1,6 +1,6 @@
 ---
 name: commit-and-push
-description: Commit the current working-tree changes as a series of focused commits (one per logical feature/fix) and then push the branch to the remote. Use when the user asks to commit and push, or says "/commit-and-push".
+description: Commit the work done in the current session as a single commit and then push the branch to the remote. Use when the user asks to commit and push, or says "/commit-and-push".
 ---
 
 # Commit and push
@@ -9,7 +9,7 @@ Same as `/commit`, then push.
 
 ## Step 1 — Commit
 
-Follow the **exact** procedure and rules in the `commit` skill (`~/.claude/skills/commit/SKILL.md`): survey the tree, read the diff, group changes into one commit per logical concern, stage explicit paths, and commit each group with a message matching the repo's style.
+Follow the **exact** procedure and rules in the `commit` skill (`~/.claude/skills/commit/SKILL.md`): survey the tree, read the diff, work out which changes belong to this session, stage explicit paths, and create a single commit whose message summarises the session, in the repo's style.
 
 Read that file now if it is not already in context, and apply it in full — including the rules about never using `git add -A`, never adding `Co-Authored-By` or other attribution trailers, never committing secrets or build artifacts, and never amending existing commits.
 
