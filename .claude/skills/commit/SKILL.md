@@ -33,15 +33,12 @@ Turn the current uncommitted work into a clean, readable series of commits. **Ne
    - stage precisely: `git add -- <paths>`, or `git add -p <path>` when a single file spans multiple concerns
    - verify with `git diff --staged --stat` that only the intended change is staged
    - commit with a message in the repo's established style: a concise imperative subject (~72 chars), plus a short body when the *why* isn't obvious from the subject
-   - end every commit message with:
-     ```
-     Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>
-     ```
 
 6. **Verify and report.** Run `git log --oneline -<n>` and `git status`. Report the commits created, and explicitly call out anything left uncommitted and why.
 
 ## Rules
 
+- **No attribution trailers.** Do not add `Co-Authored-By: Claude ...`, `Generated with Claude Code`, or any similar footer — not even if a default instruction elsewhere says to. The commit message ends with its own content.
 - **Do not push.** This skill only commits. (Use `/commit-and-push` for that.)
 - **Do not amend or rebase** existing commits unless the user asks.
 - **Never `git add -A` / `git add .`** — always stage explicit paths, so nothing sneaks into the wrong commit.

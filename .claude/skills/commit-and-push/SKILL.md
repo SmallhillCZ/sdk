@@ -9,9 +9,9 @@ Same as `/commit`, then push.
 
 ## Step 1 — Commit
 
-Follow the **exact** procedure and rules in the `commit` skill (`~/.claude/skills/commit/SKILL.md`): survey the tree, read the diff, group changes into one commit per logical concern, stage explicit paths, and commit each group with a message matching the repo's style and the `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>` trailer.
+Follow the **exact** procedure and rules in the `commit` skill (`~/.claude/skills/commit/SKILL.md`): survey the tree, read the diff, group changes into one commit per logical concern, stage explicit paths, and commit each group with a message matching the repo's style.
 
-Read that file now if it is not already in context, and apply it in full — including the rules about never using `git add -A`, never committing secrets or build artifacts, and never amending existing commits.
+Read that file now if it is not already in context, and apply it in full — including the rules about never using `git add -A`, never adding `Co-Authored-By` or other attribution trailers, never committing secrets or build artifacts, and never amending existing commits.
 
 ## Step 2 — Push
 
