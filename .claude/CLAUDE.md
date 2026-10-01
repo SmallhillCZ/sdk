@@ -5,6 +5,10 @@
 * Do not put any explanatory comments in the code
 * If memory of some code needs to be preserved for future sessions, save to CLAUDE.md in that repository. Keep CLAUDE.md small and compact it after edits.
 
+## Git
+
+* Never push straight to `master`/`main` or the default branch. Do all work on a feature branch and open a PR for each session.
+
 ## Reference Repository: smallhillcz/skeletons
 
 When implementing new features, like backend, frontend etc., always consult the reference repository at **https://github.com/smallhillcz/skeletons**.
