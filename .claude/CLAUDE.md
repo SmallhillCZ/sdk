@@ -5,6 +5,10 @@
 * Do not put any explanatory comments in the code
 * If memory of some code needs to be preserved for future sessions, save to CLAUDE.md in that repository. Keep CLAUDE.md small and compact it after edits.
 
+## Frontend
+
+* After developing a frontend feature, take a screenshot of it in the running app and show it to the user.
+
 ## Git
 
 * Never push straight to `master`/`main` or the default branch. Do all work on a feature branch and open a PR for each session.
