@@ -1,0 +1,454 @@
+#!/usr/bin/env perl
+# cclog — follow ~/.claude/command-log.txt with syntax colouring.
+#   cclog            follow (last 20 lines, then live)
+#   cclog -a         print the whole log, no follow
+#   cclog -n 100     follow, starting from the last 100 lines
+#   cclog -v N       show N lines of each heredoc body (default 2; -v alone = all)
+#   ... | cclog -    colourize stdin
+#
+# The log is written by ~/.local/bin/cclog-hook (Claude Code hooks): a line when
+# a Bash command starts, and a "= <exit> <ms>" line with the same tool_use_id
+# when it ends.
+#
+# Output: a band when the session or day changes, "↳ cwd" when the working
+# directory changes, then the command split on && || ; and newlines, one part
+# per line. The gutter shows ✓ / ✗ <exit> and the duration, patched in place if
+# the command finishes after it was printed; failed rows get a red bar.
+# Commands that change state get a chip (COMMIT, RM, WRITE, …). Heredocs are
+# folded to a summary plus their first lines. Lines never wrap: they are cut at
+# the terminal width.
+use strict;
+use warnings;
+use utf8;
+use Encode qw(decode);
+use IO::Select;
+use Time::Local qw(timelocal);
+binmode STDOUT, ':encoding(UTF-8)';
+$| = 1;
+
+my $LOG  = "$ENV{HOME}/.claude/command-log.txt";
+my $IDLE = 0.3;     # seconds of quiet before a still-running command is shown
+
+# ---------------------------------------------------------------- options
+my ($mode, $tail_n, $body_lines) = ('follow', 20, 2);
+while (@ARGV) {
+    my $a = shift @ARGV;
+    if    ($a eq '-')  { $mode = 'stdin' }
+    elsif ($a eq '-a') { $mode = 'all' }
+    elsif ($a eq '-n') { $tail_n = int(shift(@ARGV) // 20) }
+    elsif ($a eq '-v') {
+        $body_lines = (@ARGV && $ARGV[0] =~ /^\d+$/) ? shift @ARGV : 1e9;
+    }
+    else { die "usage: cclog [-a | -n N | -] [-v [N]]\n" }
+}
+
+# ---------------------------------------------------------------- output basics
+my $TTY = -t STDOUT;
+my %C = (
+    time     => "\e[2m",        # dim
+    sid      => "\e[35m",       # magenta
+    cwd      => "\e[34m",       # blue
+    cmd      => "\e[1;33m",     # bold yellow — the program being run
+    flag     => "\e[36m",       # cyan — -x / --opt
+    str      => "\e[2;32m",     # dim green — quoted strings
+    sep      => "\e[2;31m",     # dim red — | && ; etc.
+    var      => "\e[2;37m",     # dim — FOO=bar env assignments
+    arg      => "\e[38;5;249m", # light grey — plain arguments
+    prompt   => "\e[2;34m",     # dim blue — ❯
+    ok       => "\e[32m",       # ✓
+    fail     => "\e[1;31m",     # ✗ and the failed-row bar
+    warn     => "\e[33m",       # ⊘ denied
+    chip_git => "\e[1;30;45m",  # COMMIT PUSH
+    chip_del => "\e[1;30;41m",  # RM
+    chip_fs  => "\e[1;30;43m",  # CP MV EDIT WRITE
+    reset    => "\e[0m",
+);
+%C = map { $_ => '' } keys %C if !$TTY || $ENV{NO_COLOR};
+my $PLAIN = $C{reset} eq '';
+
+sub paint { my ($c, $s) = @_; "$C{$c}$s$C{reset}" }
+sub vis   { length($_[0] =~ s/\e\[[\d;]*m//gr) }       # visible width
+
+# Terminal size (0 = not a terminal: don't cut), re-read on resize.
+my ($rows, $cols);
+sub winsize {
+    return (0, 0) unless $TTY;
+    my $ws = "\0" x 8;
+    if (ioctl(STDOUT, 0x5413, $ws)) {          # TIOCGWINSZ (Linux)
+        my ($r, $c) = unpack 'S2', $ws;
+        return ($r, $c) if $c;
+    }
+    (24, $ENV{COLUMNS} || 80);
+}
+($rows, $cols) = winsize();
+$SIG{WINCH} = sub { ($rows, $cols) = winsize() };
+
+# Cut a (possibly coloured) line to $w visible characters, ending in "…".
+sub cut {
+    my ($l, $w) = @_;
+    return $l if !defined $w || vis($l) <= $w;
+    return '…' if $w < 1;
+    my ($out, $n) = ('', 0);
+    while ($l =~ /\G(\e\[[\d;]*m|.)/gcs) {
+        my $t = $1;
+        if ($t =~ /^\e/) { $out .= $t; next }
+        last if ++$n >= $w;
+        $out .= $t;
+    }
+    "$out$C{reset}…";
+}
+sub width { $cols || undef }
+
+# prefix + body cut to the terminal width, keeping the chips at the end.
+sub fit {
+    my ($prefix, $body, @chips) = @_;
+    my $tail = join '', map { " $_" } @chips;
+    return "$prefix$body$tail" unless $cols;
+    my $room = $cols - vis($prefix) - vis($tail);
+    if ($room < 8) { $tail = ''; $room = $cols - vis($prefix) }
+    $prefix . cut($body, $room) . $tail;
+}
+
+my $total = 0;      # lines printed so far (lines never wrap, so this is exact)
+sub emit { print map { "$_\n" } @_; $total += @_; return }
+
+# ---------------------------------------------------------------- command parsing
+# Words that wrap another command (or start a block): keep looking for the real one.
+my %wrapper = map { $_ => 1 }
+    qw(sudo env time nohup exec xargs nice timeout command builtin watch
+       if then else elif while until do ! {);
+
+# Split a logged command into parts at top-level && || ; and newlines. Each part:
+#   { op, out (coloured text), raw (plain text), docs => [{ delim, body => [lines] }] }
+sub split_command {
+    my ($s) = @_;
+    $s =~ s/ ⏎ /\n/g;                              # the hook logs newlines as " ⏎ "
+    my @segs;
+    my $seg = sub {
+        my ($op) = @_;
+        if (@segs && $segs[-1]{raw} !~ /\S/ && !@{ $segs[-1]{docs} }) {
+            $segs[-1]{op} = $op if @segs > 1 && $op ne "\n";   # reuse an empty part
+            return;
+        }
+        push @segs, { op => (@segs ? $op : ''), out => '', raw => '', docs => [] };
+    };
+    my $add = sub { $segs[-1]{out} .= $_[0]; $segs[-1]{raw} .= $_[1] };
+    $seg->('');
+
+    my ($cmdpos, $depth, @pending) = (1, 0);
+    pos($s) = 0;
+    while (pos($s) < length $s) {
+        if ($s =~ /\G([ \t]+)/gc) {
+            $add->($1, $1);
+        } elsif ($s =~ /\G\n/gc) {
+            for my $h (@pending) {                 # heredoc bodies follow the opener's line
+                while (pos($s) < length $s) {
+                    $s =~ /\G([^\n]*)\n?/gc;
+                    my $line = $1;
+                    last if ($h->{strip} ? $line =~ s/^\t+//r : $line) eq $h->{delim};
+                    push @{ $h->{body} }, $line;
+                }
+            }
+            @pending = ();
+            if ($depth == 0) { $seg->("\n"); $cmdpos = 1 }
+            else             { $add->(' ', "\n") }
+        } elsif ($s =~ /\G(<<<)/gc) {
+            $add->(paint(sep => $1), $1);
+        } elsif ($s =~ /\G(<<-?)([ \t]*)(['"]?)([\w.-]+)\3/gc) {
+            my $doc = { delim => $4, strip => $1 eq '<<-', body => [] };
+            push @{ $segs[-1]{docs} }, $doc;
+            push @pending, $doc;
+            $add->(paint(sep => $1) . $2 . paint(str => "$3$4$3"), "$1$2$3$4$3");
+        } elsif ($s =~ /\G('[^']*'?)/gc || $s =~ /\G("(?:\\.|[^"\\])*"?)/gc) {
+            my $q = $1;
+            if ($q =~ /\n/) {                      # multi-line string: first line, then …
+                my ($first) = split /\n/, $q;
+                my $close = (length $q > 1 && $q =~ /(['"])\z/) ? $1 : '';
+                $add->(paint(str => $first) . paint(time => ' …') . paint(str => $close), $q);
+            } else {
+                $add->(paint(str => $q), $q);
+            }
+            $cmdpos = 0;
+        } elsif ($s =~ /\G(;;|\|\||&&|\||;|\$\(|\(|\)|`|&)/gc) {
+            my $op = $1;
+            if    ($op eq '$(' || $op eq '(') { $depth++ }
+            elsif ($op eq ')')                { $depth-- if $depth > 0 }
+            elsif ($op eq '`')                { $depth = $depth ? $depth - 1 : 1 }
+            if ($depth == 0 && ($op eq '&&' || $op eq '||' || $op eq ';')) {
+                $s =~ /\G[ \t]*/gc;
+                $seg->($op);
+            } else {
+                $add->(paint(sep => $op), $op);
+            }
+            $cmdpos = 1 unless $op eq ')';
+        } elsif ($s =~ /\G([^\s'"|&;()`<]+|<)/gc) {
+            my $w = $1;
+            my $p;
+            if ($cmdpos && $w =~ /^[A-Za-z_]\w*=/) {
+                $p = paint(var => $w);             # still in command position
+            } elsif ($cmdpos) {
+                $p = paint(cmd => $w);
+                $cmdpos = $wrapper{$w} ? 1 : 0;
+            } elsif ($w =~ /^--?[A-Za-z]/) {
+                $p = paint(flag => $w);
+            } else {
+                $p = paint(arg => $w);
+            }
+            $add->($p, $w);
+        } else {
+            $s =~ /\G(.)/gcs;
+            $add->($1, $1);
+        }
+    }
+    for (@segs) { $_->{out} =~ s/[ \t]+\z//; $_->{raw} =~ s/\s+\z// }
+    pop @segs while @segs > 1 && $segs[-1]{raw} !~ /\S/ && !@{ $segs[-1]{docs} };
+    @segs;
+}
+
+# ---------------------------------------------------------------- chips and heredocs
+my $START = qr/(?:^|[|(`]|\$\()\s*(?:(?:sudo|env|nohup|time|xargs|then|do|else)\s+(?:-\S+\s+)*|\w+=\S*\s+)*/;
+
+sub doc_body { my ($seg) = @_; join "\n", map { @{ $_->{body} } } @{ $seg->{docs} } }
+
+# State-changing commands in one part, as chip labels.
+sub tags {
+    my ($seg) = @_;
+    (my $sh = $seg->{raw}) =~ s/'[^']*'?|"(?:\\.|[^"\\])*"?//g;    # ignore quoted text
+    my $body = doc_body($seg);
+    my %t;
+    $t{COMMIT} = 1 if $sh =~ /\bgit\s+(?:-C\s+\S+\s+)*commit\b/;
+    $t{PUSH}   = 1 if $sh =~ /\bgit\s+(?:-C\s+\S+\s+)*push\b/;
+    $t{RM}     = 1 if $sh =~ /${START}rm\b/;
+    $t{MV}     = 1 if $sh =~ /${START}mv\b/;
+    $t{CP}     = 1 if $sh =~ /${START}cp\b/;
+    $t{EDIT}   = 1 if $sh =~ /${START}sed\b[^|]*?\s-(?:[a-zA-Z]*i|-in-place)/;
+    $t{WRITE}  = 1 if $sh =~ /${START}tee\b/
+        || $sh =~ />>?[ \t]*(?!&|\/dev\/(?:null|stdout|stderr|tty)\b)[^\s&|;<>]/
+        || $body =~ /\bopen\s*\([^)]*,\s*['"][wax]|\.write(?:_text|_bytes)?\(|writeFileSync|\bopen\s*\(?\s*(?:my\s+)?\$?\w+\s*,\s*['"]\+?>/;
+    grep { $t{$_} } qw(COMMIT PUSH RM MV CP EDIT WRITE);
+}
+
+sub chip {
+    my ($t) = @_;
+    return "[$t]" if $PLAIN;
+    my $c = $t =~ /^(?:COMMIT|PUSH)$/ ? 'chip_git' : $t eq 'RM' ? 'chip_del' : 'chip_fs';
+    "$C{$c} $t $C{reset}";
+}
+
+sub doc_lang {
+    my ($raw) = @_;
+    my ($w) = $raw =~ /^(?:(?:sudo|env|\w+=\S*)\s+)*(\S+)/;
+    $w = ($w // '') =~ s{.*/}{}r;
+    return 'python' if $w =~ /^python/;
+    return 'js'     if $w =~ /^(?:node|deno|bun)$/;
+    return 'shell'  if $w =~ /^(?:ba|z|da)?sh$/;
+    return 'sql'    if $w =~ /^(?:psql|mysql|sqlite3)$/;
+    return 'text'   if $w =~ /^(?:cat|tee)$/ || $w eq '';
+    $w;
+}
+
+my $EXT = qr/\.(?:ya?ml|json|[cm]?[jt]sx?|py|pl|pm|sh|md|txt|env|conf|cfg|toml|ini|html?|css|sql|xml|csv|log|lock)$/;
+sub doc_files {           # files a heredoc writes to or mentions
+    my ($seg) = @_;
+    my @cand = ($seg->{raw} =~ />>?[ \t]*([^\s&|;<>'"]+)/g,
+                doc_body($seg) =~ /['"]([^'"\s]{2,})['"]/g);
+    my (%seen, @f);
+    for (@cand) {
+        next if m{^/dev/|^\w+://} || !(m{^[/~.]} || /$EXT/);
+        my $b = s{/+\z}{}r =~ s{.*/}{}r;
+        push @f, $b if length $b && !$seen{$b}++;
+    }
+    @f > 3 ? (@f[0 .. 2], '+' . (@f - 3)) : @f;
+}
+
+# ---------------------------------------------------------------- rendering
+my ($last_sid, $last_cwd, $last_day) = ('', '', '');
+my @DOW = qw(Sun Mon Tue Wed Thu Fri Sat);
+my @MON = qw(Jan Feb Mar Apr May Jun Jul Aug Sep Oct Nov Dec);
+
+sub short_date {
+    my ($y, $m, $d) = split /-/, shift;
+    my $wd = (localtime(timelocal(0, 0, 12, $d, $m - 1, $y)))[6];
+    "$DOW[$wd] " . ($d + 0) . " $MON[$m - 1]";
+}
+
+sub tilde { my $p = shift; $p =~ s{^\Q$ENV{HOME}\E(?=/|$)}{~}; $p }
+
+# "── label ───────…" filling the terminal width (80 when not a tty).
+sub band {
+    my ($label) = @_;
+    my $fill = ($cols || 80) - vis($label) - 4;
+    paint(time => '── ') . $label . paint(time => ' ' . ('─' x ($fill > 0 ? $fill : 0)));
+}
+
+# Session band / date band / ↳ cwd, only when they change.
+sub header_lines {
+    my ($e) = @_;
+    my @out;
+    my $new_day = $e->{day} ne $last_day;
+    my $cwdline = paint(time => '↳ cwd ') . paint(cwd => tilde($e->{cwd}));
+    if ($e->{sid} ne $last_sid) {
+        my @parts;
+        push @parts, paint(sid => short_date($e->{day})) if $new_day;
+        push @parts, paint(time => 'session ') . paint(sid => $e->{sid}), paint(cwd => tilde($e->{cwd}));
+        push @out, '' if $last_sid ne '';
+        push @out, band(join paint(time => ' · '), @parts);
+    } elsif ($new_day) {
+        push @out, band(paint(sid => short_date($e->{day})));
+        push @out, $cwdline if $e->{cwd} ne $last_cwd;
+    } elsif ($e->{cwd} ne $last_cwd) {
+        push @out, $cwdline;
+    }
+    ($last_sid, $last_cwd, $last_day) = @$e{qw(sid cwd day)};
+    map { cut($_, width()) } @out;
+}
+
+sub fmt_dur {
+    my ($ms) = @_;
+    return '' if !defined $ms || $ms eq '' || $ms < 1000;
+    my $s = $ms / 1000;
+    return sprintf '%.1fs', $s if $s < 10;
+    return sprintf '%ds', $s if $s < 60;
+    return sprintf '%dm%02ds', $s / 60, $s % 60 if $s < 3600;
+    sprintf '%dh%02dm', $s / 3600, ($s % 3600) / 60;
+}
+
+# (bar, status cell): 1 and 10 columns wide — mark, exit code, duration.
+sub gutter {
+    my ($e) = @_;
+    my $st = $e->{status} // '';
+    my $bad = $st ne '' && $st !~ /^(?:0|run|DENIED)$/;
+    my $cell = $st eq ''       ? '    '
+             : $st eq 'run'    ? paint(time => '⋯') . '   '
+             : $st eq '0'      ? paint(ok => '✓') . '   '
+             : $st eq 'DENIED' ? paint(warn => '⊘') . '   '
+             : do {
+                   my $t = $st eq 'INT' ? '✗ ^C' : length($st) >= 3 ? "✗$st" : "✗ $st";
+                   paint(fail => $t . ' ' x (4 - length $t));
+               };
+    ($bad ? paint(fail => '▌') : ' ', $cell . paint(time => sprintf '%6s', fmt_dur($e->{ms})));
+}
+
+# Layout: bar(1) sp time(8) sp cell(10) sp ❯ sp → commands start at column 24.
+# Continuation parts: bar(1) + 20 spaces + op(2) + sp → also column 24.
+# Heredoc bodies are indented 4 more.
+my $CMDCOL = 24;
+my $CONT   = ' ' x ($CMDCOL - 4);
+my $BODY   = ' ' x ($CMDCOL + 3);
+sub first_line {
+    my ($e) = @_;
+    my ($bar, $cell) = gutter($e);
+    my $sg = $e->{segs}[0];
+    fit("$bar " . paint(time => $e->{time}) . " $cell " . paint(prompt => '❯') . ' ',
+        $sg->{out} . doc_summary($sg), map { chip($_) } tags($sg));
+}
+
+sub doc_summary {
+    my ($sg) = @_;
+    join '', map {
+        my $n = @{ $_->{body} };
+        paint(time => ' ▸ ' . join ' · ', doc_lang($sg->{raw}), ($n == 1 ? '1 line' : "$n lines"), doc_files($sg));
+    } @{ $sg->{docs} };
+}
+
+sub command_lines {
+    my ($e) = @_;
+    my ($bar) = gutter($e);
+    my @out;
+    for my $i (0 .. $#{ $e->{segs} }) {
+        my $sg = $e->{segs}[$i];
+        if ($i == 0) {
+            push @out, first_line($e);
+        } else {
+            my $op = $sg->{op} eq "\n" ? '' : $sg->{op};
+            push @out, fit($bar . $CONT . paint(sep => sprintf '%2s', $op) . ' ',
+                           $sg->{out} . doc_summary($sg), map { chip($_) } tags($sg));
+        }
+        for my $d (@{ $sg->{docs} }) {
+            my @b = @{ $d->{body} };
+            my $n = @b > $body_lines ? $body_lines : @b;
+            for my $j (0 .. $n - 1) {
+                my $more = ($j == $n - 1 && @b > $n) ? ' …' : '';
+                push @out, cut($bar . $BODY . paint(time => ($b[$j] =~ s/\t/    /gr) . $more), width());
+            }
+        }
+    }
+    @out;
+}
+
+sub show {
+    my ($e) = @_;
+    return emit(cut($e->{text}, width())) if exists $e->{text};
+    emit(header_lines($e));
+    my @lines = command_lines($e);
+    @$e{qw(line n shown)} = ($total, scalar @lines, 1);
+    emit(@lines);
+}
+
+# A command's result arrived after it was printed.
+sub finish {
+    my ($e) = @_;
+    my ($bar, $cell) = gutter($e);
+    my $up = $total - $e->{line};
+    if ($TTY && $up <= $rows - 1) {           # still on screen: redraw it in place
+        my $s = "\e7\e[${up}A\r\e[2K" . first_line($e);
+        $s .= "\e[B\r$bar" for 2 .. $e->{n};
+        print "$s\e8";
+    } else {                                  # scrolled away / not a tty: a result line
+        emit(fit("$bar " . (' ' x 8) . " $cell " . paint(time => '↳') . ' ',
+                 paint(time => $e->{segs}[0]{raw} =~ s/\n.*//sr)));
+    }
+}
+
+# ---------------------------------------------------------------- input
+my (@queue, %running);
+
+sub handle_line {
+    my ($l) = @_;
+    $l =~ s/\r\z//;
+    if ($l =~ /^\S+ \S+  \[\w+\]  \{(\w+)\}  = (\S+)(?: (\d+))?\s*$/) {
+        my $e = delete $running{$1} or return;
+        @$e{qw(status ms)} = ($2, $3);
+        finish($e) if $e->{shown};
+        return;
+    }
+    if ($l =~ /^(\S+) (\d\d:\d\d:\d\d)\S*  \[(\w+)\]  (?:\{(\w*)\}  )?(.*?)  \$ (.*)$/) {
+        my ($day, $time, $sid, $id, $cwd, $cmd) = ($1, $2, $3, $4, $5, $6);
+        my $e = { day => $day, time => $time, sid => $sid, cwd => $cwd, segs => [split_command($cmd)] };
+        if ($id) { $e->{status} = 'run'; $running{$id} = $e }
+        push @queue, $e;
+        return;
+    }
+    push @queue, { text => $l };
+}
+
+# Print queued entries in order; a running one holds the queue until it
+# finishes or the input goes quiet.
+sub flush {
+    my ($all) = @_;
+    show(shift @queue) while @queue && ($all || ($queue[0]{status} // '') ne 'run');
+}
+
+my $fh;
+if ($mode eq 'stdin') {
+    $fh = \*STDIN;
+} elsif ($mode eq 'all') {
+    open $fh, '<', $LOG or die "cclog: $LOG: $!\n";
+} else {
+    open $fh, '-|', 'tail', '-n', $tail_n, '-F', $LOG or die "cclog: tail: $!\n";
+}
+binmode $fh;
+my $sel = IO::Select->new($fh);
+my $buf = '';
+while (1) {
+    unless ($sel->can_read($IDLE)) { flush(1); next }
+    my $r = sysread $fh, $buf, 65536, length $buf;
+    next if !defined $r && $!{EINTR};
+    last unless $r;
+    my @lines = split /\n/, $buf, -1;
+    $buf = pop @lines;
+    handle_line(decode('UTF-8', $_)) for @lines;
+    flush(0);
+}
+handle_line(decode('UTF-8', $buf)) if length $buf;
+flush(1);
