@@ -1,0 +1,20 @@
+#!/bin/sh
+# cclog-hook — Claude Code hook that appends Bash tool calls to
+# ~/.claude/command-log.txt (read by cclog). Wired up in ~/.claude/settings.json
+# for PreToolUse, PostToolUse, PostToolUseFailure and PermissionDenied.
+#
+#   start:  2026-11-20 07:35:25.123  [sid8]  {tool_use_id}  /cwd  $ command (newlines as " ⏎ ")
+#   end:    2026-11-20 07:35:26.223  [sid8]  {tool_use_id}  = <exit|INT|ERR|DENIED> <duration_ms>
+jq -r --arg t "$(date '+%F %T.%3N')" '
+  "\($t)  [\(.session_id[0:8])]  {\(.tool_use_id // "")}  " +
+  if .hook_event_name == "PreToolUse" then
+    "\(.cwd)  $ \(.tool_input.command | gsub("\n"; " ⏎ "))"
+  elif .hook_event_name == "PostToolUse" then
+    "= 0 \(.duration_ms // "")"
+  elif .hook_event_name == "PostToolUseFailure" then
+    "= \(if .is_interrupt then "INT"
+         else ((.error // "" | capture("[Ee]xit code:? *(?<c>[0-9]+)") | .c) // "ERR") end) \(.duration_ms // "")"
+  else
+    "= DENIED"
+  end
+' >> "$HOME/.claude/command-log.txt" 2>/dev/null || true
